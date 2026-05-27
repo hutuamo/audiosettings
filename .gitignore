@@ -6,3 +6,4 @@ DerivedData/
 .DS_Store
 Assets/AppIcon/AudioSettings.iconset/
 Assets/AppIcon/Variants/
+devices.json
