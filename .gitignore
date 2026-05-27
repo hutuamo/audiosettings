@@ -1,0 +1,8 @@
+.build/
+.swiftpm/
+dist/
+DerivedData/
+*.xcuserdata/
+.DS_Store
+Assets/AppIcon/AudioSettings.iconset/
+Assets/AppIcon/Variants/
