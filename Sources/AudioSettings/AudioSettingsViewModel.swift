@@ -11,8 +11,13 @@ final class AudioSettingsViewModel: ObservableObject {
     @Published private(set) var isError = false
     @Published private(set) var selectedInputDeviceUID: String?
     @Published private(set) var selectedOutputDeviceUID: String?
+    @Published private(set) var outputTestingDeviceUID: String?
+    @Published private(set) var isInputTesting = false
+    @Published private(set) var inputLevel: Float = 0
 
     private let deviceService = CoreAudioDeviceService()
+    private let testService = AudioTestService()
+    private var levelTimer: Timer?
     private var configStore: ConfigStore
     private var configPathObserver: NSObjectProtocol?
 
@@ -59,6 +64,7 @@ final class AudioSettingsViewModel: ObservableObject {
     }
 
     func refresh() {
+        stopAllTests()
         do {
             inputDevices = try deviceService.inputDevices()
             outputDevices = try deviceService.outputDevices()
@@ -139,6 +145,73 @@ final class AudioSettingsViewModel: ObservableObject {
             selectedOutputDeviceUID = uid
             try deviceService.setDefaultOutputDevice(uid: uid)
             refresh()
+        } catch {
+            setError(error)
+        }
+    }
+
+    // MARK: - 音频测试
+
+    func startOutputTest(device: AudioDevice) {
+        do {
+            try testService.startOutputTest(on: device)
+            outputTestingDeviceUID = device.uid
+        } catch {
+            setError(error)
+        }
+    }
+
+    func stopOutputTest() {
+        testService.stopOutputTest()
+        outputTestingDeviceUID = nil
+    }
+
+    func startInputTest(device: AudioDevice) {
+        switch testService.microphoneAuthorizationStatus() {
+        case .authorized:
+            beginInputTest(device)
+        case .notDetermined:
+            testService.requestMicrophoneAccess { [weak self] granted in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if granted {
+                        self.beginInputTest(device)
+                    } else {
+                        self.setStatus(AudioTestError.microphonePermissionDenied.localizedDescription, isError: true)
+                    }
+                }
+            }
+        case .denied, .restricted:
+            setStatus(AudioTestError.microphonePermissionDenied.localizedDescription, isError: true)
+        @unknown default:
+            setStatus("无法确定麦克风权限状态", isError: true)
+        }
+    }
+
+    func stopInputTest() {
+        testService.stopInputTest()
+        levelTimer?.invalidate()
+        levelTimer = nil
+        isInputTesting = false
+        inputLevel = 0
+    }
+
+    func stopAllTests() {
+        stopOutputTest()
+        stopInputTest()
+    }
+
+    private func beginInputTest(_ device: AudioDevice) {
+        do {
+            try testService.startInputTest(on: device)
+            isInputTesting = true
+            let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    self?.inputLevel = self?.testService.currentInputLevel() ?? 0
+                }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            levelTimer = timer
         } catch {
             setError(error)
         }

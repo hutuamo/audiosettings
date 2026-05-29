@@ -66,6 +66,8 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
   <string>public.app-category.utilities</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>用于实时显示所选输入设备的电平，以验证麦克风能否正常拾音。仅在本机内存中计算电平，不录音、不保存、不上传。</string>
 </dict>
 </plist>
 PLIST

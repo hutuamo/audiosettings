@@ -13,7 +13,13 @@ struct ContentView: View {
                     currentDevice: model.currentInputDevice,
                     devices: model.inputDevices,
                     selectedDeviceUID: model.selectedInputDeviceUID,
-                    onSelect: model.selectInputDevice
+                    onSelect: model.selectInputDevice,
+                    test: .input(
+                        isTesting: model.isInputTesting,
+                        level: model.inputLevel,
+                        start: model.startInputTest,
+                        stop: model.stopInputTest
+                    )
                 )
 
                 DevicePanel(
@@ -21,7 +27,12 @@ struct ContentView: View {
                     currentDevice: model.currentOutputDevice,
                     devices: model.outputDevices,
                     selectedDeviceUID: model.selectedOutputDeviceUID,
-                    onSelect: model.selectOutputDevice
+                    onSelect: model.selectOutputDevice,
+                    test: .output(
+                        testingDeviceUID: model.outputTestingDeviceUID,
+                        start: model.startOutputTest,
+                        stop: model.stopOutputTest
+                    )
                 )
             }
 
@@ -49,6 +60,9 @@ struct ContentView: View {
             model.refresh()
             model.loadSavedConfiguration()
         }
+        .onDisappear {
+            model.stopAllTests()
+        }
     }
 
     private var header: some View {
@@ -62,12 +76,22 @@ struct ContentView: View {
     }
 }
 
+private enum DeviceTestConfig {
+    case input(isTesting: Bool, level: Float, start: (AudioDevice) -> Void, stop: () -> Void)
+    case output(testingDeviceUID: String?, start: (AudioDevice) -> Void, stop: () -> Void)
+}
+
 private struct DevicePanel: View {
     let title: String
     let currentDevice: AudioDevice?
     let devices: [AudioDevice]
     let selectedDeviceUID: String?
     let onSelect: (String) -> Void
+    let test: DeviceTestConfig
+
+    private var selectedDevice: AudioDevice? {
+        devices.first { $0.uid == selectedDeviceUID }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -125,8 +149,78 @@ private struct DevicePanel: View {
                 .padding(.vertical, 3)
             }
             .listStyle(.inset)
+
+            Divider()
+
+            testControl
         }
         .padding(16)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private var testControl: some View {
+        switch test {
+        case .output(let testingDeviceUID, let start, let stop):
+            let isTesting = testingDeviceUID != nil
+            HStack {
+                Button(isTesting ? "停止测试音" : "播放测试音") {
+                    if isTesting {
+                        stop()
+                    } else if let selectedDevice {
+                        start(selectedDevice)
+                    }
+                }
+                .disabled(selectedDevice == nil)
+
+                if isTesting {
+                    Spacer()
+                    Text("播放中…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+        case .input(let isTesting, let level, let start, let stop):
+            VStack(alignment: .leading, spacing: 8) {
+                Button(isTesting ? "停止测试" : "开始测试") {
+                    if isTesting {
+                        stop()
+                    } else if let selectedDevice {
+                        start(selectedDevice)
+                    }
+                }
+                .disabled(selectedDevice == nil)
+
+                if isTesting {
+                    SegmentedLevelMeter(level: level)
+                }
+            }
+        }
+    }
+}
+
+/// 仿 macOS 系统设置「声音 › 输入」的分段电平表。线性峰值经 dBFS 映射后点亮对应段数。
+private struct SegmentedLevelMeter: View {
+    let level: Float
+    private let segmentCount = 16
+    /// 电平表本底（dBFS）。低于此视为静音、不点亮；越接近 0 越不灵敏，越负越灵敏。
+    private let floorDB: Float = -55
+
+    private var litCount: Int {
+        guard level > 0 else { return 0 }
+        let db = 20 * log10(level)  // 0 → 0dB，越小越负
+        let normalized = max(0, min(1, (db - floorDB) / -floorDB))  // floorDB…0dB 映射到 0…1
+        return Int(normalized * Float(segmentCount))
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<segmentCount, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(index < litCount ? Color.accentColor : Color.secondary.opacity(0.25))
+                    .frame(height: 14)
+            }
+        }
     }
 }
