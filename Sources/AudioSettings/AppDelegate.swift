@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        false
     }
 
     @objc private func showSettingsWindow() {
@@ -102,6 +102,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         appMenuItem.submenu = appMenu
+
+        let fileMenuItem = NSMenuItem()
+        mainMenu.addItem(fileMenuItem)
+
+        let fileMenu = NSMenu(title: "文件")
+        fileMenu.addItem(
+            withTitle: "关闭窗口",
+            action: #selector(NSWindow.performClose(_:)),
+            keyEquivalent: "w"
+        )
+        fileMenuItem.submenu = fileMenu
+
         NSApp.mainMenu = mainMenu
     }
 
